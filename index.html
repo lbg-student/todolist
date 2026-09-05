@@ -1,3 +1,299 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="할 일을 간단하게 기록하고 관리하는 미니멀 투두 리스트" />
+    <title>오늘의 할 일</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+:root {
+  --ink: #20211f;
+  --muted: #85877f;
+  --line: #e9e9e4;
+  --soft: #f6f6f2;
+  --accent: #5e6f52;
+  --accent-soft: #edf1e9;
+  --danger: #ba554d;
+  --white: #fff;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: var(--ink);
+  background: #fafaf8;
+  font-family: "Noto Sans KR", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input { font: inherit; }
+button { color: inherit; }
+
+.app-shell {
+  width: min(1080px, calc(100% - 40px));
+  min-height: 100vh;
+  margin: 0 auto;
+  background: var(--white);
+  border-inline: 1px solid #f0f0ec;
+}
+
+.topbar {
+  position: relative;
+  display: grid;
+  grid-template-columns: 150px 1fr 150px;
+  align-items: end;
+  min-height: 82px;
+  padding: 0 38px;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  align-self: center;
+  width: max-content;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.brand-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--soft);
+}
+
+.brand-mark svg { width: 20px; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+.calendar-popover { position: absolute; z-index: 30; top: 67px; left: 38px; width: 292px; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--white); box-shadow: 0 18px 45px rgb(34 35 31 / 14%); }
+.calendar-header { display: grid; grid-template-columns: 32px 1fr 32px; align-items: center; margin-bottom: 16px; text-align: center; }
+.calendar-header strong { font-size: 14px; }
+.calendar-header button { width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; font-size: 23px; cursor: pointer; }
+.calendar-header button:hover { background: var(--soft); }
+.calendar-weekdays, .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.calendar-weekdays { margin-bottom: 6px; color: #a1a29d; font-size: 10px; text-align: center; }
+.calendar-day { display: grid; aspect-ratio: 1; place-items: center; border: 0; border-radius: 50%; background: transparent; font-size: 11px; cursor: pointer; }
+.calendar-day:hover { background: var(--soft); }
+.calendar-day.today { box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); font-weight: 700; }
+.calendar-day.selected { background: var(--accent); color: white; font-weight: 700; }
+.calendar-day.has-tasks::after { position: absolute; bottom: 3px; width: 3px; height: 3px; border-radius: 50%; background: var(--accent); content: ""; }
+.calendar-day { position: relative; }
+.calendar-day.selected.has-tasks::after { background: white; }
+.calendar-day.outside { color: #ccc; pointer-events: none; }
+.calendar-today { display: block; width: 100%; margin-top: 13px; padding: 9px; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--accent); font-size: 11px; font-weight: 700; cursor: pointer; }
+
+.tabs { display: flex; justify-content: center; gap: 42px; }
+.tab {
+  position: relative;
+  padding: 30px 2px 22px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.tab::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  background: var(--ink);
+  content: "";
+  opacity: 0;
+  transform: scaleX(.4);
+  transition: .2s ease;
+}
+.tab:hover { color: var(--ink); }
+.tab.active { color: var(--ink); font-weight: 700; }
+.tab.active::after { opacity: 1; transform: scaleX(1); }
+.tab-count { margin-left: 4px; color: #a0a29b; font-size: 12px; font-weight: 600; }
+
+.workspace { padding: 56px 76px 90px; }
+.section-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 34px; }
+.eyebrow { min-height: 19px; margin: 0 0 8px; color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+h1 { margin: 0; font-size: clamp(28px, 4vw, 38px); letter-spacing: -.055em; line-height: 1.2; }
+.view-description { margin: 0 0 4px; color: var(--muted); font-size: 13px; }
+
+.task-form {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  margin-bottom: 14px;
+  padding: 0 10px 0 18px;
+  border: 1px solid #dfdfd8;
+  border-radius: 4px;
+  transition: border-color .2s, box-shadow .2s;
+}
+.task-form:focus-within { border-color: #9ca795; box-shadow: 0 0 0 3px var(--accent-soft); }
+.add-icon { color: var(--accent); font-size: 26px; font-weight: 300; line-height: 1; }
+.task-form input { flex: 1; min-width: 0; padding: 20px 0; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 15px; }
+.task-form input::placeholder { color: #b0b1ab; }
+.add-button { padding: 10px 18px; border: 0; border-radius: 4px; background: var(--ink); color: var(--white); font-size: 13px; font-weight: 700; cursor: pointer; transition: transform .15s, opacity .15s; }
+.add-button:hover { opacity: .84; }
+.add-button:active { transform: scale(.97); }
+
+.task-list { margin: 0; padding: 0; list-style: none; }
+.task-item {
+  position: relative;
+  z-index: 0;
+  display: grid;
+  grid-template-columns: 32px 1fr 42px;
+  align-items: center;
+  min-height: 72px;
+  border-bottom: 1px solid var(--line);
+}
+.task-item.menu-open { z-index: 20; }
+.check-control { display: grid; width: 22px; height: 22px; place-items: center; cursor: pointer; }
+.check-control input { position: absolute; opacity: 0; pointer-events: none; }
+.checkbox {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1.5px solid #b8bab2;
+  border-radius: 50%;
+  color: white;
+  transition: .2s ease;
+}
+.check-control:hover .checkbox { border-color: var(--accent); }
+.check-control input:focus-visible + .checkbox { outline: 3px solid var(--accent-soft); }
+.check-control input:checked + .checkbox { border-color: var(--accent); background: var(--accent); }
+.checkbox svg { width: 12px; opacity: 0; transform: scale(.5); transition: .15s; }
+.check-control input:checked + .checkbox svg { opacity: 1; transform: scale(1); }
+
+.task-copy { min-width: 0; padding: 20px 10px; }
+.task-text { display: block; overflow: hidden; font-size: 15px; line-height: 1.55; text-overflow: ellipsis; white-space: nowrap; }
+.task-meta { display: block; margin-top: 4px; color: #a1a29d; font-size: 11px; }
+.task-item.is-completed .task-text { color: #8c8e87; text-decoration: line-through; text-decoration-thickness: 1px; }
+.task-item.is-trash .checkbox { border-style: dashed; background: #f5f5f1; }
+.edit-wrap { display: flex; align-items: center; gap: 7px; padding: 12px 8px; }
+.edit-input { flex: 1; min-width: 0; padding: 9px 10px; border: 1px solid #aab2a4; border-radius: 4px; outline: 3px solid var(--accent-soft); font-size: 14px; }
+.edit-action { padding: 8px 10px; border: 0; border-radius: 4px; background: var(--soft); font-size: 11px; font-weight: 700; cursor: pointer; }
+.edit-action.save { background: var(--accent); color: white; }
+
+.more-button { display: grid; width: 36px; height: 36px; place-items: center; justify-self: end; border: 0; border-radius: 50%; background: transparent; color: #8e9089; font-size: 22px; line-height: 1; cursor: pointer; transition: .15s; }
+.more-button:hover, .more-button[aria-expanded="true"] { background: var(--soft); color: var(--ink); }
+.more-button:focus-visible { outline: 3px solid var(--accent-soft); }
+.item-menu { position: absolute; z-index: 30; top: 55px; right: 0; width: 148px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--white); box-shadow: 0 12px 30px rgb(34 35 31 / 18%); }
+.item-menu button { width: 100%; padding: 9px 10px; border: 0; border-radius: 5px; background: transparent; text-align: left; font-size: 12px; cursor: pointer; }
+.item-menu button:hover { background: var(--soft); }
+.item-menu .danger { color: var(--danger); }
+
+.empty-state { padding: 90px 20px; color: var(--muted); text-align: center; }
+.empty-icon { display: grid; width: 46px; height: 46px; margin: 0 auto 18px; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: #a9aaa3; font-size: 18px; }
+.empty-state strong { display: block; margin-bottom: 7px; color: #555750; font-size: 15px; }
+.empty-state p { margin: 0; font-size: 12px; }
+.toast { position: fixed; bottom: 28px; left: 50%; z-index: 20; padding: 11px 18px; border-radius: 6px; background: #292a27; color: white; font-size: 12px; opacity: 0; pointer-events: none; transform: translate(-50%, 12px); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .app-shell { width: 100%; border: 0; }
+  .topbar { grid-template-columns: 1fr; min-height: auto; padding: 20px 20px 0; }
+  .calendar-popover { top: 67px; left: 20px; width: min(292px, calc(100vw - 40px)); }
+  .brand { margin-bottom: 18px; }
+  .topbar-spacer { display: none; }
+  .tabs { justify-content: flex-start; gap: 28px; overflow-x: auto; }
+  .tab { flex: 0 0 auto; padding: 12px 0 16px; }
+  .workspace { padding: 38px 20px 70px; }
+  .section-heading { align-items: flex-start; flex-direction: column; gap: 10px; margin-bottom: 26px; }
+  .view-description { margin: 0; }
+  .task-form { min-height: 58px; padding-left: 14px; }
+  .add-button { padding-inline: 14px; }
+  .task-item { min-height: 66px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
+
+    </style>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <button class="brand" id="calendarButton" type="button" aria-label="달력 열기" aria-expanded="false">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M7 3v3M17 3v3M4.5 9h15M6.5 5h11a2 2 0 0 1 2 2v11.5a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/><path d="m9 14 2 2 4-5"/></svg>
+          </span>
+          <span id="calendarButtonLabel">오늘</span>
+        </button>
+
+        <section class="calendar-popover" id="calendarPopover" aria-label="달력" hidden>
+          <div class="calendar-header">
+            <button type="button" id="prevMonth" aria-label="이전 달">‹</button>
+            <strong id="calendarMonth"></strong>
+            <button type="button" id="nextMonth" aria-label="다음 달">›</button>
+          </div>
+          <div class="calendar-weekdays" aria-hidden="true">
+            <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+          </div>
+          <div class="calendar-grid" id="calendarGrid"></div>
+          <button class="calendar-today" id="goToday" type="button">오늘로 이동</button>
+        </section>
+
+        <nav class="tabs" aria-label="할 일 분류">
+          <button class="tab active" type="button" data-view="todo" aria-selected="true">
+            할 일 <span class="tab-count" data-count="todo">0</span>
+          </button>
+          <button class="tab" type="button" data-view="completed" aria-selected="false">
+            완성된 일 <span class="tab-count" data-count="completed">0</span>
+          </button>
+          <button class="tab" type="button" data-view="trash" aria-selected="false">
+            휴지통 <span class="tab-count" data-count="trash">0</span>
+          </button>
+        </nav>
+        <div class="topbar-spacer" aria-hidden="true"></div>
+      </header>
+
+      <section class="workspace">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow" id="todayLabel"></p>
+            <h1 id="viewTitle">할 일</h1>
+          </div>
+          <p class="view-description" id="viewDescription">오늘 해야 할 일을 가볍게 적어보세요.</p>
+        </div>
+
+        <form class="task-form" id="taskForm" autocomplete="off">
+          <span class="add-icon" aria-hidden="true">+</span>
+          <label class="sr-only" for="taskInput">새로운 할 일</label>
+          <input id="taskInput" maxlength="120" placeholder="새로운 할 일을 입력하세요" />
+          <button class="add-button" type="submit">추가</button>
+        </form>
+
+        <div class="list-area">
+          <ul class="task-list" id="taskList" aria-live="polite"></ul>
+          <div class="empty-state" id="emptyState" hidden>
+            <span class="empty-icon" aria-hidden="true">✓</span>
+            <strong id="emptyTitle">아직 할 일이 없어요</strong>
+            <p id="emptyText">위 입력창에서 첫 번째 할 일을 추가해 보세요.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script>
 const STORAGE_KEY = "minimal-todo-items-v2";
 
 const state = {
@@ -401,3 +697,8 @@ document.addEventListener("click", () => {
 updateSelectedDateLabel();
 renderCalendar();
 render({ animate: true });
+
+    </script>
+  </body>
+</html>
+
