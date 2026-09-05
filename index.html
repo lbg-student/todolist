@@ -1,0 +1,403 @@
+const STORAGE_KEY = "minimal-todo-items-v2";
+
+const state = {
+  view: "todo",
+  tasks: loadTasks(),
+  openMenuId: null,
+  selectedDate: new Date(),
+  calendarDate: new Date(),
+};
+
+const elements = {
+  tabs: [...document.querySelectorAll(".tab")],
+  counts: [...document.querySelectorAll("[data-count]")],
+  form: document.querySelector("#taskForm"),
+  input: document.querySelector("#taskInput"),
+  list: document.querySelector("#taskList"),
+  empty: document.querySelector("#emptyState"),
+  emptyTitle: document.querySelector("#emptyTitle"),
+  emptyText: document.querySelector("#emptyText"),
+  title: document.querySelector("#viewTitle"),
+  description: document.querySelector("#viewDescription"),
+  today: document.querySelector("#todayLabel"),
+  toast: document.querySelector("#toast"),
+  calendarButton: document.querySelector("#calendarButton"),
+  calendarButtonLabel: document.querySelector("#calendarButtonLabel"),
+  calendarPopover: document.querySelector("#calendarPopover"),
+  calendarMonth: document.querySelector("#calendarMonth"),
+  calendarGrid: document.querySelector("#calendarGrid"),
+  prevMonth: document.querySelector("#prevMonth"),
+  nextMonth: document.querySelector("#nextMonth"),
+  goToday: document.querySelector("#goToday"),
+};
+
+const viewCopy = {
+  todo: ["할 일", "오늘 해야 할 일을 가볍게 적어보세요.", "아직 할 일이 없어요", "위 입력창에서 첫 번째 할 일을 추가해 보세요."],
+  completed: ["완성된 일", "끝낸 일을 한눈에 확인할 수 있어요.", "완료한 일이 없어요", "할 일의 체크 버튼을 누르면 이곳으로 이동해요."],
+  trash: ["휴지통", "필요하면 되돌리거나 완전히 삭제할 수 있어요.", "휴지통이 비어 있어요", "제거한 할 일이 이곳에 잠시 보관돼요."],
+};
+
+function loadTasks() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (Array.isArray(saved)) {
+      const today = dateKey(new Date());
+      return saved.map((task) => ({ ...task, date: task.date || today }));
+    }
+  } catch (error) {
+    console.warn("저장된 목록을 불러오지 못했습니다.", error);
+  }
+  return [
+    { id: crypto.randomUUID(), text: "오늘 할 일 정리하기", status: "todo", deletedFrom: null, date: dateKey(new Date()), createdAt: Date.now() },
+    { id: crypto.randomUUID(), text: "면접 답변 한 번 소리 내어 연습하기", status: "todo", deletedFrom: null, date: dateKey(new Date()), createdAt: Date.now() + 1 },
+  ];
+}
+
+function saveTasks() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
+}
+
+function visibleTasks() {
+  const selected = dateKey(state.selectedDate);
+  if (state.view !== "todo") {
+    return state.tasks.filter((task) => task.status === state.view);
+  }
+  const today = dateKey(new Date());
+  if (selected === today) {
+    return state.tasks.filter((task) => task.status === "todo" && task.date <= today);
+  }
+  return state.tasks.filter((task) => task.status === "todo" && task.date === selected);
+}
+
+function render({ animate = false } = {}) {
+  const tasks = visibleTasks();
+  const [title, description, emptyTitle, emptyText] = viewCopy[state.view];
+  elements.title.textContent = title;
+  elements.description.textContent = description;
+  elements.emptyTitle.textContent = emptyTitle;
+  elements.emptyText.textContent = emptyText;
+  elements.form.hidden = state.view !== "todo";
+  elements.list.replaceChildren(...tasks.map(createTaskElement));
+  elements.empty.hidden = tasks.length > 0;
+  state.openMenuId = null;
+
+  elements.tabs.forEach((tab) => {
+    const selected = tab.dataset.view === state.view;
+    tab.classList.toggle("active", selected);
+    tab.setAttribute("aria-selected", String(selected));
+  });
+  elements.counts.forEach((count) => {
+    count.textContent = count.dataset.count === "todo"
+      ? visibleCountForSelectedDate()
+      : state.tasks.filter((task) => task.status === count.dataset.count).length;
+  });
+
+  if (animate && window.gsap) {
+    gsap.fromTo(".task-item", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: .3, stagger: .035, ease: "power2.out" });
+  }
+}
+
+function createTaskElement(task) {
+  const item = document.createElement("li");
+  item.className = `task-item is-${task.status}`;
+  item.dataset.id = task.id;
+
+  const checkLabel = document.createElement("label");
+  checkLabel.className = "check-control";
+  checkLabel.title = task.status === "completed" ? "할 일로 되돌리기" : task.status === "trash" ? "휴지통 항목" : "완료로 이동";
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = task.status === "completed";
+  checkbox.disabled = task.status === "trash";
+  checkbox.setAttribute("aria-label", checkLabel.title);
+  const customCheckbox = document.createElement("span");
+  customCheckbox.className = "checkbox";
+  customCheckbox.innerHTML = '<svg viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="m3 7 2.5 2.5L11 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  checkLabel.append(checkbox, customCheckbox);
+
+  const copy = document.createElement("div");
+  copy.className = "task-copy";
+  const text = document.createElement("span");
+  text.className = "task-text";
+  text.textContent = task.text;
+  const meta = document.createElement("span");
+  meta.className = "task-meta";
+  const scheduledLabel = formatTaskDate(task.date);
+  meta.textContent = task.status === "completed"
+    ? `${scheduledLabel} · 완료됨`
+    : task.status === "trash"
+      ? `${scheduledLabel} · 삭제됨`
+      : task.date < dateKey(new Date())
+        ? `${scheduledLabel} · 기한 지남`
+        : scheduledLabel;
+  copy.append(text, meta);
+
+  const more = document.createElement("button");
+  more.className = "more-button";
+  more.type = "button";
+  more.textContent = "⋯";
+  more.setAttribute("aria-label", `${task.text} 더보기`);
+  more.setAttribute("aria-expanded", "false");
+
+  checkbox.addEventListener("change", () => moveWithAnimation(item, () => toggleComplete(task.id)));
+  more.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleMenu(task.id, item, more);
+  });
+
+  item.append(checkLabel, copy, more);
+  return item;
+}
+
+function toggleMenu(id, item, button) {
+  document.querySelectorAll(".item-menu").forEach((menu) => menu.remove());
+  document.querySelectorAll(".task-item.menu-open").forEach((taskItem) => taskItem.classList.remove("menu-open"));
+  document.querySelectorAll(".more-button").forEach((control) => control.setAttribute("aria-expanded", "false"));
+  if (state.openMenuId === id) {
+    state.openMenuId = null;
+    return;
+  }
+  state.openMenuId = id;
+  item.classList.add("menu-open");
+  button.setAttribute("aria-expanded", "true");
+  const menu = document.createElement("div");
+  menu.className = "item-menu";
+  menu.setAttribute("role", "menu");
+  const task = state.tasks.find((entry) => entry.id === id);
+  const actions = task.status === "trash"
+    ? [["수정하기", () => editTask(id)], ["되돌리기", () => restoreTask(id)], ["완전히 삭제", () => permanentlyDelete(id), "danger"]]
+    : [["수정하기", () => editTask(id)], ["휴지통으로 이동", () => trashTask(id), "danger"]];
+  actions.forEach(([label, action, className]) => {
+    const actionButton = document.createElement("button");
+    actionButton.type = "button";
+    actionButton.textContent = label;
+    actionButton.className = className || "";
+    actionButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const taskItem = elements.list.querySelector(`[data-id="${CSS.escape(id)}"]`);
+      if (label === "수정하기") action();
+      else moveWithAnimation(taskItem, action);
+    });
+    menu.append(actionButton);
+  });
+  item.append(menu);
+  if (window.gsap) gsap.fromTo(menu, { opacity: 0, y: -4, scale: .97 }, { opacity: 1, y: 0, scale: 1, duration: .16, ease: "power2.out" });
+}
+
+function moveWithAnimation(item, callback) {
+  if (!item || !window.gsap) return callback();
+  gsap.to(item, { opacity: 0, x: 20, height: 0, minHeight: 0, duration: .28, ease: "power2.in", onComplete: callback });
+}
+
+function toggleComplete(id) {
+  const task = state.tasks.find((entry) => entry.id === id);
+  task.status = task.status === "completed" ? "todo" : "completed";
+  task.completedAt = task.status === "completed" ? Date.now() : null;
+  saveTasks();
+  render();
+  showToast(task.status === "completed" ? "완성된 일로 이동했어요." : "할 일로 되돌렸어요.");
+}
+
+function editTask(id) {
+  const task = state.tasks.find((entry) => entry.id === id);
+  const item = elements.list.querySelector(`[data-id="${CSS.escape(id)}"]`);
+  if (!task || !item) return;
+  state.openMenuId = null;
+  item.querySelector(".item-menu")?.remove();
+  const copy = item.querySelector(".task-copy");
+  const wrap = document.createElement("form");
+  wrap.className = "edit-wrap";
+  const input = document.createElement("input");
+  input.className = "edit-input";
+  input.value = task.text;
+  input.maxLength = 120;
+  input.setAttribute("aria-label", "할 일 내용 수정");
+  const save = document.createElement("button");
+  save.className = "edit-action save";
+  save.type = "submit";
+  save.textContent = "저장";
+  const cancel = document.createElement("button");
+  cancel.className = "edit-action";
+  cancel.type = "button";
+  cancel.textContent = "취소";
+  wrap.append(input, save, cancel);
+  copy.replaceWith(wrap);
+  item.querySelector(".more-button").hidden = true;
+  input.focus();
+  input.select();
+  wrap.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const cleaned = input.value.trim();
+    if (!cleaned) return showToast("내용을 한 글자 이상 입력해 주세요.");
+    task.text = cleaned.slice(0, 120);
+    saveTasks();
+    render();
+    showToast("할 일을 수정했어요.");
+  });
+  cancel.addEventListener("click", () => render());
+}
+
+function trashTask(id) {
+  const task = state.tasks.find((entry) => entry.id === id);
+  task.deletedFrom = task.status;
+  task.status = "trash";
+  saveTasks();
+  render();
+  showToast("휴지통으로 이동했어요.");
+}
+
+function restoreTask(id) {
+  const task = state.tasks.find((entry) => entry.id === id);
+  task.status = task.deletedFrom === "completed" ? "completed" : "todo";
+  task.deletedFrom = null;
+  saveTasks();
+  render();
+  showToast("원래 목록으로 되돌렸어요.");
+}
+
+function permanentlyDelete(id) {
+  state.tasks = state.tasks.filter((entry) => entry.id !== id);
+  saveTasks();
+  render();
+  showToast("완전히 삭제했어요.");
+}
+
+function sameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function dateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateKey(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatTaskDate(value) {
+  const date = parseDateKey(value);
+  const today = new Date();
+  if (sameDay(date, today)) return "오늘";
+  return new Intl.DateTimeFormat("ko-KR", { month: "short", day: "numeric" }).format(date);
+}
+
+function visibleCountForSelectedDate() {
+  const selected = dateKey(state.selectedDate);
+  const today = dateKey(new Date());
+  return state.tasks.filter((task) => task.status === "todo" && (selected === today ? task.date <= today : task.date === selected)).length;
+}
+
+function updateSelectedDateLabel() {
+  elements.today.textContent = new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "long" }).format(state.selectedDate);
+  elements.calendarButtonLabel.textContent = sameDay(state.selectedDate, new Date())
+    ? "오늘"
+    : new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" }).format(state.selectedDate);
+}
+
+function renderCalendar() {
+  const year = state.calendarDate.getFullYear();
+  const month = state.calendarDate.getMonth();
+  elements.calendarMonth.textContent = `${year}년 ${month + 1}월`;
+  elements.calendarGrid.replaceChildren();
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const lastDate = new Date(year, month + 1, 0).getDate();
+  for (let index = 0; index < 42; index += 1) {
+    const dayNumber = index - firstWeekday + 1;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "calendar-day";
+    if (dayNumber < 1 || dayNumber > lastDate) {
+      button.classList.add("outside");
+      button.tabIndex = -1;
+    } else {
+      const date = new Date(year, month, dayNumber);
+      button.textContent = dayNumber;
+      button.setAttribute("aria-label", `${year}년 ${month + 1}월 ${dayNumber}일`);
+      button.classList.toggle("today", sameDay(date, new Date()));
+      button.classList.toggle("selected", sameDay(date, state.selectedDate));
+      button.classList.toggle("has-tasks", state.tasks.some((task) => task.date === dateKey(date)));
+      button.addEventListener("click", () => {
+        state.selectedDate = date;
+        updateSelectedDateLabel();
+        renderCalendar();
+        render({ animate: true });
+        closeCalendar();
+      });
+    }
+    elements.calendarGrid.append(button);
+  }
+}
+
+function closeCalendar() {
+  elements.calendarPopover.hidden = true;
+  elements.calendarButton.setAttribute("aria-expanded", "false");
+}
+
+elements.calendarButton.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const willOpen = elements.calendarPopover.hidden;
+  elements.calendarPopover.hidden = !willOpen;
+  elements.calendarButton.setAttribute("aria-expanded", String(willOpen));
+  if (willOpen) {
+    renderCalendar();
+    if (window.gsap) gsap.fromTo(elements.calendarPopover, { opacity: 0, y: -6 }, { opacity: 1, y: 0, duration: .18 });
+  }
+});
+elements.calendarPopover.addEventListener("click", (event) => event.stopPropagation());
+elements.prevMonth.addEventListener("click", () => {
+  state.calendarDate = new Date(state.calendarDate.getFullYear(), state.calendarDate.getMonth() - 1, 1);
+  renderCalendar();
+});
+elements.nextMonth.addEventListener("click", () => {
+  state.calendarDate = new Date(state.calendarDate.getFullYear(), state.calendarDate.getMonth() + 1, 1);
+  renderCalendar();
+});
+elements.goToday.addEventListener("click", () => {
+  state.selectedDate = new Date();
+  state.calendarDate = new Date();
+  updateSelectedDateLabel();
+  renderCalendar();
+  render({ animate: true });
+});
+
+function showToast(message) {
+  elements.toast.textContent = message;
+  if (!window.gsap) return;
+  gsap.killTweensOf(elements.toast);
+  gsap.timeline().to(elements.toast, { opacity: 1, y: 0, duration: .2 }).to(elements.toast, { opacity: 0, y: 10, duration: .25, delay: 1.5 });
+}
+
+elements.form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const text = elements.input.value.trim();
+  if (!text) return showToast("할 일을 입력해 주세요.");
+  const task = { id: crypto.randomUUID(), text, status: "todo", deletedFrom: null, date: dateKey(state.selectedDate), createdAt: Date.now() };
+  state.tasks.unshift(task);
+  elements.input.value = "";
+  saveTasks();
+  render();
+  const item = elements.list.querySelector(`[data-id="${CSS.escape(task.id)}"]`);
+  if (window.gsap) gsap.fromTo(item, { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: .3, ease: "power2.out" });
+});
+
+elements.tabs.forEach((tab) => tab.addEventListener("click", () => {
+  if (state.view === tab.dataset.view) return;
+  state.view = tab.dataset.view;
+  render({ animate: true });
+}));
+
+document.addEventListener("click", () => {
+  closeCalendar();
+  state.openMenuId = null;
+  document.querySelectorAll(".item-menu").forEach((menu) => menu.remove());
+  document.querySelectorAll(".task-item.menu-open").forEach((item) => item.classList.remove("menu-open"));
+  document.querySelectorAll(".more-button").forEach((button) => button.setAttribute("aria-expanded", "false"));
+});
+
+updateSelectedDateLabel();
+renderCalendar();
+render({ animate: true });
